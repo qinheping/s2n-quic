@@ -49,7 +49,9 @@ impl Run {
                 let server_len = self.servers.gen();
                 let client_len = self.clients.gen();
 
-                let events = self.gen_network(seed, server_len, client_len, &network);
+                let streams = self.streams.gen();
+
+                let events = self.gen_network(seed, server_len, client_len, streams, &network);
 
                 let mut servers = vec![];
                 for _ in 0..server_len {
@@ -59,7 +61,6 @@ impl Run {
                 for _ in 0..client_len {
                     let count = self.connections.gen() as usize;
                     let delay = self.connect_delay;
-                    let streams = self.streams;
                     let stream_data = self.stream_data;
                     endpoint::client(
                         handle,
@@ -123,11 +124,19 @@ impl Run {
         Ok(())
     }
 
-    fn gen_network(&self, seed: u64, servers: u32, clients: u32, model: &Model) -> events::Events {
+    fn gen_network(
+        &self,
+        seed: u64,
+        servers: u32,
+        clients: u32,
+        streams: u32,
+        model: &Model,
+    ) -> events::Events {
         let mut events = stats::Parameters {
             seed,
             servers,
             clients,
+            streams,
             ..Default::default()
         };
 

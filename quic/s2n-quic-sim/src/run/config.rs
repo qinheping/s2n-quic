@@ -76,7 +76,7 @@ config!(
         retransmit_rate: CliRange<f64>,
 
         #[name = "max_udp_payload"]
-        #[default = "1450"]
+        #[default = "1480"]
         max_udp_payload: CliRange<u16>,
 
         #[name = "max_inflight"]

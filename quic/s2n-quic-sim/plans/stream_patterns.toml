@@ -1,27 +1,40 @@
 [sim]
 connections = "1"
 delay = "25ms"
-streams = "1..200"
+streams = "1..100"
 max_inflight = 10000000
 iterations = 1000
-stream_data = "2500..29478216"
+connect_delay = "1ms..5s"
+#stream_data = "2500..29478216"
+stream_data = "2500..1000000"
+#stream_data = "2500..10000"
 
 [report.rx-packets]
 filters = ["conn.success", "conn.client"]
-x = "conn.streams"
+x = "param.streams"
 y = "conn.rx.packets"
 
 [report.lost-packets]
-filters = ["conn.success", "conn.client"]
-x = "conn.streams"
+filters = ["conn.success", "conn.server"]
+x = "param.streams"
 y = "conn.lost.packets"
 
 [report.rx-throughput]
 filters = ["conn.success", "conn.client"]
-x = "conn.streams"
+x = "param.streams"
 y = "conn.rx.stream-throughput"
 
 [report.congestion-window]
-filters = ["conn.success", "conn.client"]
-x = "conn.streams"
+filters = ["conn.success", "conn.server"]
+x = "param.streams"
 y = "conn.max-cwin"
+
+[report.bytes-in-flight]
+filters = ["conn.success", "conn.server"]
+x = "param.streams"
+y = "conn.max-bytes-in-flight"
+
+[report.slow-start-exit]
+filters = ["conn.success", "conn.server"]
+x = "param.streams"
+y = "conn.slow-start-exit"

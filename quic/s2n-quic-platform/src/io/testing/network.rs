@@ -231,7 +231,7 @@ impl Queue {
         let mtu = MaxMtu::default().into();
         let local_address = addr.into();
         Self {
-            capacity: 1024,
+            capacity: 1024 * 1024,
             mtu,
             packets: VecDeque::new(),
             pending: Packet::new(mtu, local_address),

@@ -189,13 +189,14 @@ impl<N: Network> bach::executor::Environment for Env<N> {
         // actually doing any work. The value of 100 was chosen somewhat arbitrarily as a high
         // enough number that we won't get false positives but low enough that the number of
         // loops stays within reasonable ranges.
-        if self.stalled_iterations > 100 {
+        if self.stalled_iterations > 1000 {
             panic!("the runtime stalled after 100 iterations");
         }
 
         while let Some(time) = self.time.advance() {
             let _ = time;
             if self.time.wake() > 0 {
+                self.stalled_iterations = 0;
                 break;
             }
         }

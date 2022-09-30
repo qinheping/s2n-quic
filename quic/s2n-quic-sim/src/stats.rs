@@ -155,6 +155,8 @@ pub struct Parameters {
     pub inflight_delay: Option<Duration>,
     #[prost(uint64, tag = "15")]
     pub inflight_delay_threshold: u64,
+    #[prost(uint32, tag = "16")]
+    pub streams: u32,
 }
 
 impl From<Parameters> for Stats {
@@ -211,6 +213,8 @@ pub struct Connection {
     pub min_rtt: Option<Duration>,
     #[prost(message, tag = "20")]
     pub smoothed_rtt: Option<Duration>,
+    #[prost(bool, tag = "21")]
+    pub slow_start_exit: bool,
 }
 
 impl From<Connection> for Stats {
@@ -315,7 +319,15 @@ impl Counts {
         let start = self.stream_progress_start?.as_duration();
         let end = self.stream_progress_end?.as_duration();
         let duration = end - start;
-        Some(bytes / duration.as_secs_f64())
+        if duration.is_zero() {
+            return Some(0.0);
+        }
+        let throughput = bytes / duration.as_secs_f64();
+        if throughput.is_finite() {
+            Some(throughput)
+        } else {
+            None
+        }
     }
 }
 
@@ -426,6 +438,9 @@ impl Type {
 use Type::{Bool as B, Duration as T, Integer as I, Percent as P, Throughput as Tpt};
 
 static QUERIES: &[(&str, Type, Q)] = &[
+    ("param.streams", I, |params, _conn, _conns| {
+        Some(params.streams as _)
+    }),
     ("conn.duration", T, |_params, conn, _conns| {
         let duration = conn.duration()?;
         Some(duration.as_secs_f64())
@@ -470,6 +485,9 @@ static QUERIES: &[(&str, Type, Q)] = &[
     }),
     ("conn.max-bytes-in-flight", I, |_params, conn, _conns| {
         Some(conn.max_bytes_in_flight as _)
+    }),
+    ("conn.slow-start-exit", B, |_params, conn, _conns| {
+        Some(if conn.slow_start_exit { 1.0 } else { 0.0 })
     }),
     ("conn.min-rtt", T, |_params, conn, _conns| {
         Some(conn.min_rtt?.as_duration().as_secs_f64())

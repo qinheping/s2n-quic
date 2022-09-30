@@ -171,6 +171,16 @@ impl event::Subscriber for Events {
     }
 
     #[inline]
+    fn on_slow_start_exited(
+        &mut self,
+        context: &mut Self::ConnectionContext,
+        _meta: &event::ConnectionMeta,
+        event: &event::events::SlowStartExited,
+    ) {
+        context.slow_start_exit = true;
+    }
+
+    #[inline]
     fn on_handshake_status_updated(
         &mut self,
         context: &mut Self::ConnectionContext,

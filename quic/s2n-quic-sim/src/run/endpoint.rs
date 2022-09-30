@@ -18,6 +18,7 @@ pub fn server(handle: &Handle, events: events::Events) -> Result<SocketAddr> {
     let server = Server::builder()
         .with_io(handle.builder().build().unwrap())?
         .with_tls((certificates::CERT_PEM, certificates::KEY_PEM))?
+        .with_limits(Limits::default().limits())?
         .with_event((events, Tracing::default()))?;
 
     let mut server = if std::env::var("BBR").is_ok() {
@@ -39,7 +40,7 @@ pub fn server(handle: &Handle, events: events::Events) -> Result<SocketAddr> {
                         let mut send_size = None;
 
                         while let Ok(Some(chunk)) = stream.receive().await {
-                            if send_size == None {
+                            if send_size.is_none() {
                                 send_size =
                                     Some(u64::from_be_bytes(chunk[..8].try_into().unwrap()));
                             }
@@ -53,6 +54,9 @@ pub fn server(handle: &Handle, events: events::Events) -> Result<SocketAddr> {
                                 break;
                             }
                         }
+
+                        let _ = stream.finish();
+                        let _ = stream.flush().await;
                     });
                 }
             });
@@ -68,12 +72,13 @@ pub fn client(
     servers: &[SocketAddr],
     count: usize,
     delay: CliRange<humantime::Duration>,
-    streams: CliRange<u32>,
+    stream_count: u32,
     stream_data: CliRange<u64>,
 ) -> Result {
     let client = Client::builder()
         .with_io(handle.builder().build().unwrap())?
         .with_tls(certificates::CERT_PEM)?
+        .with_limits(Limits::default().limits())?
         .with_event((events, Tracing::default()))?
         .start()?;
 
@@ -90,9 +95,9 @@ pub fn client(
                 time::delay(conn_delay).await;
             }
 
-            let mut connection = connection.await?;
+            let connection = connection.await?;
 
-            let mut stream_count = streams.gen();
+            let mut stream_count = stream_count;
 
             while stream_count > 0 {
                 let stream_delay = delay.gen_duration();
@@ -103,8 +108,11 @@ pub fn client(
                 stream_count -= stream_burst;
 
                 for _ in 0..stream_burst {
-                    let stream = connection.open_bidirectional_stream().await?;
+                    let mut handle = connection.handle();
+
                     primary::spawn(async move {
+                        let stream = handle.open_bidirectional_stream().await?;
+
                         let (mut recv, mut send) = stream.split();
 
                         let response_size = stream_data.gen();
@@ -116,12 +124,12 @@ pub fn client(
                         while let Some(chunk) = send_data.send_one(usize::MAX) {
                             send.send(chunk).await?;
                         }
+                        send.finish()?;
 
                         while recv.receive().await?.is_some() {}
 
                         <s2n_quic::stream::Result<()>>::Ok(())
-                    })
-                    .await?;
+                    });
                 }
             }
 
@@ -130,4 +138,53 @@ pub fn client(
     }
 
     Ok(())
+}
+
+#[derive(Debug)]
+pub struct Limits {
+    /// The maximum bits/sec for each connection
+    pub max_throughput: u64,
+
+    /// The expected RTT in milliseconds
+    pub expected_rtt: u64,
+}
+
+impl Default for Limits {
+    fn default() -> Self {
+        Self {
+            max_throughput: 10_000,
+            expected_rtt: 100,
+        }
+    }
+}
+
+impl Limits {
+    pub fn limits(&self) -> s2n_quic::provider::limits::Limits {
+        let data_window = self.data_window();
+
+        s2n_quic::provider::limits::Limits::default()
+            .with_data_window(data_window)
+            .unwrap()
+            .with_max_send_buffer_size(data_window.min(u32::MAX as _) as _)
+            .unwrap()
+            .with_bidirectional_local_data_window(data_window)
+            .unwrap()
+            .with_bidirectional_remote_data_window(data_window)
+            .unwrap()
+            .with_unidirectional_data_window(data_window)
+            .unwrap()
+            .with_max_open_local_bidirectional_streams(u32::MAX as _)
+            .unwrap()
+            .with_max_open_remote_bidirectional_streams(u32::MAX as _)
+            .unwrap()
+    }
+
+    fn data_window(&self) -> u64 {
+        s2n_quic_core::transport::parameters::compute_data_window(
+            self.max_throughput,
+            core::time::Duration::from_millis(self.expected_rtt),
+            2,
+        )
+        .as_u64()
+    }
 }
