@@ -28,7 +28,7 @@ pub async fn handle_connection(connection: Connection, www_dir: Arc<Path>) {
         {
             tokio::spawn(async move {
                 if let Err(err) = handle_perf_stream(amount, stream).await {
-                    eprintln!("Stream errror: {:?}", err);
+                    eprintln!("Stream error: {:?}", err);
                 }
             });
             continue;
