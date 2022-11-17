@@ -72,8 +72,8 @@ impl<'a, C: Client<'a>> Thread<'a, C> {
         trace.exec_client(now, op);
         use op::Client::*;
         match op {
-            Sleep { timeout } => {
-                self.timer.sleep(now, *timeout);
+            Sleep { amount } => {
+                self.timer.sleep(now, *amount);
                 self.op = Some(Op::Sleep);
             }
             Connect {

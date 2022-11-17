@@ -65,6 +65,11 @@ impl Builder {
         self
     }
 
+    pub fn sleep(&mut self, amount: core::time::Duration) -> &mut Self {
+        self.ops.push(crate::operation::Client::Sleep { amount });
+        self
+    }
+
     pub fn checkpoint(
         &mut self,
     ) -> (

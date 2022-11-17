@@ -98,8 +98,8 @@ impl From<u64> for IterateValue {
 pub enum Client {
     /// Pause for the specified duration before processing the next op
     Sleep {
-        #[serde(with = "duration_format", rename = "timeout_ms")]
-        timeout: Duration,
+        #[serde(with = "duration_format", rename = "amount_ms")]
+        amount: Duration,
     },
     /// Open a connection with an identifier
     Connect {

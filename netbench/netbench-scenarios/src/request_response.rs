@@ -10,6 +10,9 @@ config!({
     /// The size of the server's response to the client
     let response_size: Byte = 10.megabytes();
 
+    /// How long the client will wait before making another request
+    let request_delay: Duration = 0.seconds();
+
     /// How long the server will take to respond to the request
     let response_delay: Duration = 0.seconds();
 
@@ -19,8 +22,14 @@ config!({
     /// The number of separate connections to create
     let connections: u64 = 1;
 
+    /// How long the client will wait before establishing another connetion
+    let connect_delay: Duration = 0.seconds();
+
     /// Specifies if the requests should be performed in parallel
     let parallel: bool = false;
+
+    /// Specifies if the connections should be opened in parallel
+    let parallel_connections: bool = false;
 
     /// The rate at which the client sends data
     let client_send_rate: Option<Rate> = None;
@@ -44,11 +53,14 @@ pub fn scenario(config: Config) -> Scenario {
         response_size,
         count,
         connections,
+        connect_delay,
         parallel,
+        parallel_connections,
         client_send_rate,
         client_receive_rate,
         server_send_rate,
         server_receive_rate,
+        request_delay,
         response_delay,
         response_unblock,
     } = config;
@@ -109,24 +121,56 @@ pub fn scenario(config: Config) -> Scenario {
     Scenario::build(|scenario| {
         let server = scenario.create_server();
 
-        scenario.create_client(|client| {
-            for _ in 0..connections {
-                client.connect_to(&server, |conn| {
-                    if parallel {
-                        conn.scope(|scope| {
-                            let mut prev_checkpoint = None;
-                            for _ in 0..count {
-                                scope.spawn(|conn| {
-                                    request(conn, &mut prev_checkpoint);
-                                });
-                            }
-                        });
-                    } else {
-                        for _ in 0..count {
-                            request(conn, &mut None);
+        let connect_to_server = |client: &mut builder::client::Builder| {
+            client.connect_to(&server, |conn| {
+                if parallel {
+                    conn.scope(|scope| {
+                        let mut prev_checkpoint = None;
+                        for idx in 0..count {
+                            scope.spawn(|conn| {
+                                let request_delay = request_delay * idx as u32;
+                                if request_delay != Duration::ZERO {
+                                    conn.sleep(request_delay);
+                                }
+
+                                request(conn, &mut prev_checkpoint);
+                            });
+                        }
+                    });
+                } else {
+                    for _ in 0..count {
+                        request(conn, &mut None);
+
+                        if request_delay != Duration::ZERO {
+                            conn.sleep(request_delay);
                         }
                     }
+                }
+            });
+        };
+
+        scenario.create_client(|client| {
+            if parallel_connections {
+                client.scope(|scope| {
+                    for idx in 0..connections {
+                        scope.spawn(|client| {
+                            let connect_delay = connect_delay * idx as u32;
+                            if connect_delay != Duration::ZERO {
+                                client.sleep(connect_delay);
+                            }
+
+                            connect_to_server(client);
+                        });
+                    }
                 });
+            } else {
+                for _ in 0..connections {
+                    connect_to_server(client);
+
+                    if connect_delay != Duration::ZERO {
+                        client.sleep(connect_delay);
+                    }
+                }
             }
         });
     })
