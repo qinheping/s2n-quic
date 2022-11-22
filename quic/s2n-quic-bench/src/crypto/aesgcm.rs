@@ -11,6 +11,7 @@ use s2n_quic_crypto::testing::{
 struct Implementation {
     key: Key,
     name: &'static str,
+    init: Box<dyn Fn()>,
 }
 
 macro_rules! impls {
@@ -23,6 +24,9 @@ macro_rules! impls {
             impls.push(Implementation {
                 key: imp.new(black_box([1; KEY_LEN])),
                 name: imp.name(),
+                init: Box::new(|| {
+                    black_box(imp.new(black_box([1; KEY_LEN])));
+                }),
             });
         }
 
@@ -38,6 +42,12 @@ pub fn benchmarks(c: &mut Criterion) {
     let aad = black_box([123u8; 20]);
 
     for (group, impls) in impls.iter() {
+        let mut init = c.benchmark_group(format!("crypto/aesgcm/{}/init", group));
+        for imp in impls.iter() {
+            init.bench_function(imp.name, |b| b.iter(&imp.init));
+        }
+        init.finish();
+
         let mut encrypt = c.benchmark_group(format!("crypto/aesgcm/{}/encrypt", group));
         for imp in impls.iter() {
             for block in testing::BLOCK_SIZES.iter() {
